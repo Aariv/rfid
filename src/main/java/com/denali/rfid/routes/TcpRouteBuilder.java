@@ -30,6 +30,9 @@ public class TcpRouteBuilder extends RouteBuilder {
 
 	@Override
 	public void configure() throws Exception {
+		
+		onException(RuntimeException.class).handled(true).log("Error has occured");
+		
 		// Get data from tcp port 4001
 		from(tcpServerEndpoint).routeId(tcpRouteName)
 			.log("Payload from TCP -> ${body}")

@@ -38,7 +38,7 @@ public class VisitorGatewayRouteBuilder extends RouteBuilder {
 	
 	@Override
 	public void configure() throws Exception {
-		//onException(RuntimeException.class).handled(true).log("Error has occured");
+		onException(RuntimeException.class).handled(true).log("Error has occured");
 		
 		from(visitorGatewayRouteEndpoint)
 			.routeId(visitorGateWayRouterName)

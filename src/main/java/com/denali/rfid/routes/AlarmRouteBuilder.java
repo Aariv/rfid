@@ -34,18 +34,18 @@ public class AlarmRouteBuilder extends RouteBuilder {
 	@Override
 	public void configure() throws Exception {
 		
-		//onException(RuntimeException.class).handled(true).log("Error has occured");
+		onException(RuntimeException.class).handled(true).log("Error has occured");
 		
 		from(alarmEndpoint)
 		.routeId(alarmRouterName)
 			.log("Alarm Details -> ${body}")
 				.pipeline().multicast()
-					.to("direct-vm:processMismatchAlarm")
+					.to("direct-vm:processMismatchReader")
 					.to("direct-vm:processReaderNotFound")
 					.to("direct-vm:processExpiredAlarm");
 				
-		
-		from("direct-vm:processMismatchAlarm")
+		// For reader miss-matches
+		from("direct-vm:processMismatchReader")
 		.routeId("MISSMATCH_ROUTER")
 			.log("Alarm Details MISSMATCH_ROUTER -> ${body}")
 			.bean(AlarmCommon.class, "onReaderMismatch")
@@ -67,7 +67,7 @@ public class AlarmRouteBuilder extends RouteBuilder {
 			.endChoice()
 			.otherwise().log("Alarm Already exists for mismatch reader");
 		
-		
+		// For reader not found scenario
 		from("direct-vm:processReaderNotFound")
 			.routeId("READER_NOT_FOUND_ROUTER")
 			.log("Alarm Details READER_NOT_FOUND_ROUTER -> ${body}")
@@ -90,6 +90,7 @@ public class AlarmRouteBuilder extends RouteBuilder {
 			.endChoice()
 			.otherwise().log("Alarm Already exists for reader not found");
 		
+		// For visitor from and to date expired scenario
 		from("direct-vm:processExpiredAlarm")
 			.routeId("VISITOR_EXPIRED_ROUTER")
 			.log("Alarm Details VISITOR_EXPIRED_ROUTER -> ${body}")

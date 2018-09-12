@@ -35,6 +35,8 @@ public class RfidRouteBuilder extends RouteBuilder {
 
 	@Override
 	public void configure() throws Exception {
+		onException(RuntimeException.class).handled(true).log("Error has occured");
+		
 		from(sedaStage1Endpoint)
 			.routeId(rfidRouteName)
 			.log("Payload from seda stage1 -> ${body}")

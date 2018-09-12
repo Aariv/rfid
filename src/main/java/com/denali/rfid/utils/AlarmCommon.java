@@ -33,13 +33,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Component
 public class AlarmCommon {
-	
+
 	@Value("${alarm.index.name}")
 	private String alarmIndexName;
-	
+
 	@Value("${alarm.index.type}")
 	private String alarmIndexType;
-	
+
 	public void onPayloadForAlarm(Exchange exchange) {
 		VisitorDetailsDTO visitorDetails = exchange.getIn().getBody(VisitorDetailsDTO.class);
 		Object rfidData = exchange.getProperty("RFID_DETAILS");
@@ -47,7 +47,7 @@ public class AlarmCommon {
 		RfidVisitor rfidVisitor = new RfidVisitor(rfidDTO, visitorDetails);
 		exchange.getIn().setBody(rfidVisitor);
 	}
-	
+
 	public void onConvertAlarmToElastic(Exchange exchange) {
 		AlarmDTO data = (AlarmDTO) exchange.getProperty("ALARM");
 		data.setAlarmSent(true);
@@ -59,7 +59,7 @@ public class AlarmCommon {
 		exchange.getIn().setBody(indexRequest);
 		exchange.getIn().setHeader("indexName", alarmIndexName);
 	}
-	
+
 	public AlarmDTO prepareAlarmPayload(RfidVisitor rfidVisitor, String type) {
 		AlarmDTO alarmDTO = new AlarmDTO();
 		alarmDTO.setAlarmType(type.toUpperCase());
@@ -70,10 +70,10 @@ public class AlarmCommon {
 		alarmDTO.setCreatedDateTime(DateUtils.dateFormattedWith24Hours());
 		return alarmDTO;
 	}
-	
+
 	public void onSearchAlarm(Exchange exchange) {
 		AlarmDTO data = (AlarmDTO) exchange.getProperty("ALARM");
-		//AlarmDTO data = exchange.getIn().getBody(AlarmDTO.class);
+		// AlarmDTO data = exchange.getIn().getBody(AlarmDTO.class);
 		SearchRequest search = new SearchRequest();
 		SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
 		BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
@@ -83,7 +83,7 @@ public class AlarmCommon {
 		search.source(sourceBuilder);
 		exchange.getIn().setBody(search);
 	}
-	
+
 	public void onValidateAlarm(Exchange exchange) {
 		String dataFromElastic = exchange.getIn().getBody(String.class);
 		try {
@@ -111,7 +111,7 @@ public class AlarmCommon {
 	}
 
 	private String generateId(AlarmDTO alarmDTO) {
-		return alarmDTO.getReaderId() + "-"+ alarmDTO.getVrlId() +"-"+ alarmDTO.getAlarmType().replaceAll(" ", "-");
+		return alarmDTO.getReaderId() + "-" + alarmDTO.getVrlId() + "-" + alarmDTO.getAlarmType().replaceAll(" ", "-");
 	}
 
 	public void onReaderMismatch(Exchange exchange) {
@@ -158,36 +158,7 @@ public class AlarmCommon {
 			}
 		}
 	}
-	
-	public void onReaderMismatchRequest(Exchange exchange) {
-		AlarmDTO data = (AlarmDTO) exchange.getProperty("INTRUSION_ALARM");
-		exchange.getIn().setBody(data);
-	}
-	
-	public void onVisitorExpiredRequest(Exchange exchange) {
-		AlarmDTO data = (AlarmDTO) exchange.getProperty("TIME_ELAPSED");
-		exchange.getIn().setBody(data);
-	}
-	
-	public void onReaderNotFoundRequest(Exchange exchange) {
-		AlarmDTO data = (AlarmDTO) exchange.getProperty("INTRUSION_ALARM");
-		exchange.getIn().setBody(data);
-	}
-	
-	public void onIntrusionAlarmPayload(Exchange exchange) throws JsonProcessingException {
-		AlarmDTO data = (AlarmDTO) exchange.getProperty("INTRUSION_ALARM");
-		ObjectMapper oMapper = new ObjectMapper();
-		String alarm = oMapper.writeValueAsString(data);
-		exchange.getIn().setBody(alarm);
-	}
-	
-	public void onTimeElapsedAlarmPayload(Exchange exchange) throws JsonProcessingException {
-		AlarmDTO data = (AlarmDTO) exchange.getProperty("TIME_ELAPSED");
-		ObjectMapper oMapper = new ObjectMapper();
-		String alarm = oMapper.writeValueAsString(data);
-		exchange.getIn().setBody(alarm);
-	}
-	
+
 	public void onAlarmPayload(Exchange exchange) throws JsonProcessingException {
 		AlarmDTO data = exchange.getIn().getBody(AlarmDTO.class);
 		ObjectMapper oMapper = new ObjectMapper();
