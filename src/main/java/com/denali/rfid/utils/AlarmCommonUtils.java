@@ -32,7 +32,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  *
  */
 @Component
-public class AlarmCommon {
+public class AlarmCommonUtils {
 
 	@Value("${alarm.index.name}")
 	private String alarmIndexName;
@@ -40,24 +40,24 @@ public class AlarmCommon {
 	@Value("${alarm.index.type}")
 	private String alarmIndexType;
 
-	public void onPayloadForAlarm(Exchange exchange) {
-		VisitorDetailsDTO visitorDetails = exchange.getIn().getBody(VisitorDetailsDTO.class);
-		Object rfidData = exchange.getProperty("RFID_DETAILS");
-		RfidDTO rfidDTO = (RfidDTO) rfidData;
-		RfidVisitor rfidVisitor = new RfidVisitor(rfidDTO, visitorDetails);
-		exchange.getIn().setBody(rfidVisitor);
-	}
-
-	public void onConvertAlarmToElastic(Exchange exchange) {
-		AlarmDTO data = (AlarmDTO) exchange.getProperty("ALARM_DETAILS");
-		data.setAlarmSent(true);
-		ObjectMapper oMapper = new ObjectMapper();
-		@SuppressWarnings("unchecked")
-		Map<String, Object> alarm = oMapper.convertValue(data, Map.class);
-		IndexRequest indexRequest = new IndexRequest(alarmIndexName, alarmIndexType, generateId(data));
-		indexRequest.source(alarm);
-		exchange.getIn().setBody(indexRequest);
-		exchange.getIn().setHeader("indexName", alarmIndexName);
+	public void onReaderMismatch(Exchange exchange) {
+		RfidVisitor rfidVisitor = exchange.getIn().getBody(RfidVisitor.class);
+		if (rfidVisitor != null) {
+			VisitorDetailsDTO visitorDTO = rfidVisitor.getVisitorDetailsDTO();
+			RfidDTO rfid = rfidVisitor.getRfidDTO();
+			if (visitorDTO.getReaders() != null && !visitorDTO.getReaders().isEmpty()) {
+				for (ReaderDTO readerDTO : visitorDTO.getReaders()) {
+					String readerId = readerDTO.getReaderId();
+					/**
+					 * If the reader from RFID and visitor's reader mismatch generate Intrusion
+					 * Alarm
+					 */
+					if (!readerId.equalsIgnoreCase(rfid.getReader())) {
+						exchange.getIn().setBody(prepareAlarmPayload(rfidVisitor, AlarmType.INTRUSION.getType()));
+					}
+				}
+			}
+		}
 	}
 
 	public AlarmDTO prepareAlarmPayload(RfidVisitor rfidVisitor, String type) {
@@ -71,22 +71,8 @@ public class AlarmCommon {
 		return alarmDTO;
 	}
 
-	public void onSearchAlarm(Exchange exchange) {
+	public void onAlarmSearch(Exchange exchange) {
 		AlarmDTO data = (AlarmDTO) exchange.getProperty("ALARM_DETAILS");
-		// AlarmDTO data = exchange.getIn().getBody(AlarmDTO.class);
-		SearchRequest search = new SearchRequest();
-		SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
-		BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
-		boolQuery.should(QueryBuilders.termQuery("_id", generateId(data)));
-		boolQuery.should(QueryBuilders.termQuery("alarmSent", false));
-		sourceBuilder.query(boolQuery);
-		search.source(sourceBuilder);
-		exchange.getIn().setBody(search);
-	}
-	
-	public void onSearchAlarmTimeElapsed(Exchange exchange) {
-		AlarmDTO data = (AlarmDTO) exchange.getProperty("ALARM");
-		// AlarmDTO data = exchange.getIn().getBody(AlarmDTO.class);
 		SearchRequest search = new SearchRequest();
 		SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
 		BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
@@ -97,9 +83,8 @@ public class AlarmCommon {
 		exchange.getIn().setBody(search);
 	}
 
-	public void onSearchIntrusion(Exchange exchange) {
-		AlarmDTO data = (AlarmDTO) exchange.getProperty("ALARM");
-		// AlarmDTO data = exchange.getIn().getBody(AlarmDTO.class);
+	public void onAlarmSearchAgain(Exchange exchange) {
+		AlarmDTO data = (AlarmDTO) exchange.getIn().getBody();
 		SearchRequest search = new SearchRequest();
 		SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
 		BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
@@ -109,8 +94,12 @@ public class AlarmCommon {
 		search.source(sourceBuilder);
 		exchange.getIn().setBody(search);
 	}
-	
-	public void onValidateAlarm(Exchange exchange) {
+
+	private String generateId(AlarmDTO alarmDTO) {
+		return alarmDTO.getReaderId() + "-" + alarmDTO.getVrlId() + "-" + alarmDTO.getAlarmType().replaceAll(" ", "-");
+	}
+
+	public void onAlarmValidation(Exchange exchange) {
 		String dataFromElastic = exchange.getIn().getBody(String.class);
 		try {
 			JSONObject fromEs = new JSONObject(dataFromElastic);
@@ -136,28 +125,23 @@ public class AlarmCommon {
 		}
 	}
 
-	private String generateId(AlarmDTO alarmDTO) {
-		return alarmDTO.getReaderId() + "-" + alarmDTO.getVrlId() + "-" + alarmDTO.getAlarmType().replaceAll(" ", "-");
+	public void onConvertAlarmToElastic(Exchange exchange) {
+		AlarmDTO data = (AlarmDTO) exchange.getProperty("ALARM_DETAILS");
+		data.setAlarmSent(true);
+		ObjectMapper oMapper = new ObjectMapper();
+		@SuppressWarnings("unchecked")
+		Map<String, Object> alarm = oMapper.convertValue(data, Map.class);
+		IndexRequest indexRequest = new IndexRequest(alarmIndexName, alarmIndexType, generateId(data));
+		indexRequest.source(alarm);
+		exchange.getIn().setBody(indexRequest);
+		exchange.getIn().setHeader("indexName", alarmIndexName);
 	}
 
-	public void onReaderMismatch(Exchange exchange) {
-		RfidVisitor rfidVisitor = exchange.getIn().getBody(RfidVisitor.class);
-		if (rfidVisitor != null) {
-			VisitorDetailsDTO visitorDTO = rfidVisitor.getVisitorDetailsDTO();
-			RfidDTO rfid = rfidVisitor.getRfidDTO();
-			if (visitorDTO.getReaders() != null && !visitorDTO.getReaders().isEmpty()) {
-				for (ReaderDTO readerDTO : visitorDTO.getReaders()) {
-					String readerId = readerDTO.getReaderId();
-					/**
-					 * If the reader from RFID and visitor's reader mismatch generate Intrusion
-					 * Alarm
-					 */
-					if (!readerId.equalsIgnoreCase(rfid.getReader())) {
-						exchange.getIn().setBody(prepareAlarmPayload(rfidVisitor, AlarmType.INTRUSION.getType()));
-					}
-				}
-			}
-		}
+	public void onAlarmPayload(Exchange exchange) throws JsonProcessingException {
+		AlarmDTO data = exchange.getIn().getBody(AlarmDTO.class);
+		ObjectMapper oMapper = new ObjectMapper();
+		String alarm = oMapper.writeValueAsString(data);
+		exchange.getIn().setBody(alarm);
 	}
 
 	public void onReaderNotFound(Exchange exchange) {
@@ -169,7 +153,7 @@ public class AlarmCommon {
 			}
 		}
 	}
-
+	
 	public void onVisitorDateExpired(Exchange exchange) {
 		RfidVisitor rfidVisitor = exchange.getIn().getBody(RfidVisitor.class);
 		if (rfidVisitor != null) {
@@ -183,12 +167,5 @@ public class AlarmCommon {
 				exchange.getIn().setBody(prepareAlarmPayload(rfidVisitor, AlarmType.TIME_ELAPSED.getType()));
 			}
 		}
-	}
-
-	public void onAlarmPayload(Exchange exchange) throws JsonProcessingException {
-		AlarmDTO data = exchange.getIn().getBody(AlarmDTO.class);
-		ObjectMapper oMapper = new ObjectMapper();
-		String alarm = oMapper.writeValueAsString(data);
-		exchange.getIn().setBody(alarm);
 	}
 }
